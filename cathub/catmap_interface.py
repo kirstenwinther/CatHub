@@ -3,14 +3,16 @@ import json
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import create_engine 
+from sqlalchemy import create_engine
 from ase.db import connect
 from ase.data import chemical_symbols, atomic_numbers
 from tabulate import tabulate
 
 
-write_columns = ['surface_name', 'site_name', 'species_name', 'formation_energy', 'frequencies', 'reference']
+write_columns = ['surface_name', 'site_name', 'species_name',
+                 'formation_energy', 'frequencies', 'reference']
 num_decimal_places = 9
+
 
 def db_to_dataframe(table_name, filename):
     "Read cathub .db file into pandas dataframe"
@@ -25,6 +27,7 @@ def db_to_dataframe(table_name, filename):
     df = pd.read_sql_table(table_name, cnx)
     return df
 
+
 def write_energies(db_filepath, reference_gases, dummy_gases, dft_corrections_gases, beef_dft_helmholtz_offset, field_effects, adsorbate_parameters, write_gases, write_adsorbates, verbose=True):
 
     df_out = pd.DataFrame(columns=write_columns)
@@ -36,18 +39,24 @@ def write_energies(db_filepath, reference_gases, dummy_gases, dft_corrections_ga
         print('-' * len(system_header) + '\n')
 
     if write_gases:
-        df_out = write_gas_energies(db_filepath, df_out, reference_gases, dummy_gases, dft_corrections_gases, beef_dft_helmholtz_offset, field_effects, verbose)
+        df_out = write_gas_energies(db_filepath, df_out, reference_gases, dummy_gases,
+                                    dft_corrections_gases, beef_dft_helmholtz_offset, field_effects, verbose)
 
     if write_adsorbates:
-        df_out = write_adsorbate_energies(db_filepath, df_out, adsorbate_parameters, reference_gases, dft_corrections_gases, field_effects, verbose)
+        df_out = write_adsorbate_energies(
+            db_filepath, df_out, adsorbate_parameters, reference_gases, dft_corrections_gases, field_effects, verbose)
 
     # write corrected energy data to file
-    system_dir_path = db_filepath.parent / f'{adsorbate_parameters["desired_surface"]}_{adsorbate_parameters["desired_facet"]}'
+    system_dir_path = db_filepath.parent / \
+        f'{adsorbate_parameters["desired_surface"]}_{adsorbate_parameters["desired_facet"]}'
     Path.mkdir(system_dir_path, parents=True, exist_ok=True)
-    energies_filepath = system_dir_path / f'energies_f{field_effects["epsilon"]:.2e}.txt'
+    energies_filepath = system_dir_path / \
+        f'energies_f{field_effects["epsilon"]:.2e}.txt'
     with open(energies_filepath, 'w') as energies_file:
-        df_out[write_columns].to_string(energies_file, index=False, justify='left')
+        df_out[write_columns].to_string(
+            energies_file, index=False, justify='left')
     return None
+
 
 def write_gas_energies(db_filepath, df_out, reference_gases, dummy_gases, dft_corrections_gases, beef_dft_helmholtz_offset, field_effects, verbose):
     "Write formation energies to energies.txt after applying free energy corrections"
@@ -66,7 +75,8 @@ def write_gas_energies(db_filepath, df_out, reference_gases, dummy_gases, dft_co
     reference_gas_energies = {}
     for row in gas_atoms_rows:
         if row.formula in dft_corrections_gases:
-            reference_gas_energies[row.formula] = row.energy + dft_corrections_gases[row.formula]
+            reference_gas_energies[row.formula] = row.energy + \
+                dft_corrections_gases[row.formula]
         else:
             reference_gas_energies[row.formula] = row.energy
 
@@ -122,7 +132,8 @@ def write_gas_energies(db_filepath, df_out, reference_gases, dummy_gases, dft_co
 
         # Apply field effects
         if field_effects:
-            electric.append(get_electric_field_contribution(field_effects, row.formula))
+            electric.append(get_electric_field_contribution(
+                field_effects, row.formula))
             relative_energy += electric[-1]
 
         species.append(row.formula)
@@ -131,11 +142,13 @@ def write_gas_energies(db_filepath, df_out, reference_gases, dummy_gases, dft_co
         references.append('')
 
     df = pd.DataFrame(list(zip(surface, site, species, formation_energies, frequencies, references)),
-                       columns=write_columns)
+                      columns=write_columns)
     if field_effects:
-        df = pd.concat([df, pd.DataFrame(electric, columns=['electric'])], axis=1)
+        df = pd.concat(
+            [df, pd.DataFrame(electric, columns=['electric'])], axis=1)
     if beef_dft_helmholtz_offset:
-        df = pd.concat([df, pd.DataFrame(offset, columns=['Hemlholtz DFT Offset'])], axis=1)
+        df = pd.concat(
+            [df, pd.DataFrame(offset, columns=['Hemlholtz DFT Offset'])], axis=1)
     df_out = df_out.append(df, ignore_index=True)
 
     if verbose:
@@ -152,16 +165,21 @@ def write_gas_energies(db_filepath, df_out, reference_gases, dummy_gases, dft_co
         for index, species_name in enumerate(df['species_name']):
             sub_table = []
             beef_correction = dft_corrections_gases[species_name] if species_name in dft_corrections_gases else 0.0
-            sub_table.extend([species_name, f'{beef_correction:.{num_decimal_places}f}'])
+            sub_table.extend(
+                [species_name, f'{beef_correction:.{num_decimal_places}f}'])
             if field_effects:
-                sub_table.append(f'{df_out["electric"][index]:.{num_decimal_places}f}')
+                sub_table.append(
+                    f'{df_out["electric"][index]:.{num_decimal_places}f}')
             if beef_dft_helmholtz_offset:
-                sub_table.append(f'{df_out["Hemlholtz DFT Offset"][index]:.{num_decimal_places}f}')
+                sub_table.append(
+                    f'{df_out["Hemlholtz DFT Offset"][index]:.{num_decimal_places}f}')
             sub_table.append(df["formation_energy"][index])
             table.append(sub_table)
-        print(tabulate(table, headers=table_headers, tablefmt='psql', colalign=("right", ) * len(table_headers), disable_numparse=True))
+        print(tabulate(table, headers=table_headers, tablefmt='psql', colalign=(
+            "right", ) * len(table_headers), disable_numparse=True))
         print('\n')
     return df_out
+
 
 def get_electric_field_contribution(field_effects, species_value, reactants=None):
     epsilon = field_effects['epsilon']
@@ -179,7 +197,8 @@ def get_electric_field_contribution(field_effects, species_value, reactants=None
         if species_value + '_g' in mu:
             species_value = species_value + '_g'
     if species_value in mu:
-        energy_contribution = mu[species_value] * epsilon - 0.5 * alpha[species_value] * epsilon**2
+        energy_contribution = mu[species_value] * \
+            epsilon - 0.5 * alpha[species_value] * epsilon**2
     else:
         energy_contribution = 0.0
 
@@ -197,6 +216,7 @@ def get_electric_field_contribution(field_effects, species_value, reactants=None
 
     return energy_contribution
 
+
 def write_adsorbate_energies(db_filepath, df_out, adsorbate_parameters, reference_gases, dft_corrections_gases, field_effects, verbose):
     "Write formation energies to energies.txt after applying free energy corrections"
 
@@ -208,8 +228,8 @@ def write_adsorbate_energies(db_filepath, df_out, adsorbate_parameters, referenc
     desired_facet = adsorbate_parameters['desired_facet']
     df1 = df1.loc[df1['surface_composition'] == desired_surface]
     df1 = df1.loc[df1['facet'].str.contains(desired_facet)]
-    
-    ## build dataframe data for adsorbate species
+
+    # build dataframe data for adsorbate species
     db = connect(str(db_filepath))
     surface, site, species, formation_energies, frequencies, references = [], [], [], [], [], []
 
@@ -240,19 +260,22 @@ def write_adsorbate_energies(db_filepath, df_out, adsorbate_parameters, referenc
         site.append(desired_facet)
         species.append(species_value)
 
-        (site_wise_formation_energies, site_wise_electric_energies) = get_formation_energies(df2, species_list, species_value, products_list, reference_gases, dft_corrections_gases, adsorbate_parameters, field_effects)
+        (site_wise_formation_energies, site_wise_electric_energies) = get_formation_energies(df2, species_list,
+                                                                                             species_value, products_list, reference_gases, dft_corrections_gases, adsorbate_parameters, field_effects)
         min_formation_energy = min(site_wise_formation_energies)
         min_index = site_wise_formation_energies.index(min_formation_energy)
         if field_effects:
             electric.append(site_wise_electric_energies[min_index])
-        formation_energies.append(f'{min_formation_energy:.{num_decimal_places}f}')
+        formation_energies.append(
+            f'{min_formation_energy:.{num_decimal_places}f}')
         frequencies.append([])
         references.append('')
-    
+
     df3 = pd.DataFrame(list(zip(surface, site, species, formation_energies, frequencies, references)),
                        columns=write_columns)
     if field_effects:
-        df3 = pd.concat([df3, pd.DataFrame(electric, columns=['electric'])], axis=1)
+        df3 = pd.concat(
+            [df3, pd.DataFrame(electric, columns=['electric'])], axis=1)
     df_out = df_out.append(df3, ignore_index=True)
 
     if verbose:
@@ -267,19 +290,24 @@ def write_adsorbate_energies(db_filepath, df_out, adsorbate_parameters, referenc
         for index, species_name in enumerate(df3['species_name']):
             sub_table = []
             solvation_correction = adsorbate_parameters['solvation_corrections_adsorbates'][species_name]
-            sub_table.extend([species_name, f'{solvation_correction:.{num_decimal_places}f}'])
+            sub_table.extend(
+                [species_name, f'{solvation_correction:.{num_decimal_places}f}'])
             if field_effects:
-                sub_table.append(f'{df_out["electric"][index]:.{num_decimal_places}f}')
+                sub_table.append(
+                    f'{df_out["electric"][index]:.{num_decimal_places}f}')
             sub_table.append(df3["formation_energy"][index])
             table.append(sub_table)
-        print(tabulate(table, headers=table_headers, tablefmt='psql', colalign=("right", ) * len(table_headers), disable_numparse=True))
+        print(tabulate(table, headers=table_headers, tablefmt='psql', colalign=(
+            "right", ) * len(table_headers), disable_numparse=True))
         print('\n')
     return df_out
 
+
 def get_formation_energies(df, species_list, species_value, products_list, reference_gases, dft_corrections_gases, adsorbate_parameters, field_effects):
     "Compute formation energies for a given species at all suitable adsorption sites"
-    
-    indices = [index for index, value in enumerate(species_list) if value == species_value]
+
+    indices = [index for index, value in enumerate(
+        species_list) if value == species_value]
     facet_list = df.facet.iloc[indices].tolist()
 
     site_wise_formation_energies = []
@@ -293,23 +321,27 @@ def get_formation_energies(df, species_list, species_value, products_list, refer
             reactants = json.loads(df.reactants.iloc[reaction_index])
             products = products_list[reaction_index]
             reaction_energy = df.reaction_energy.iloc[reaction_index]
-            (formation_energy, electric_contribution) = get_adsorbate_formation_energy(species_value, reactants, products, reaction_energy, reference_gases, dft_corrections_gases, adsorbate_parameters, field_effects)
+            (formation_energy, electric_contribution) = get_adsorbate_formation_energy(species_value, reactants,
+                                                                                       products, reaction_energy, reference_gases, dft_corrections_gases, adsorbate_parameters, field_effects)
             site_wise_formation_energies.append(formation_energy)
             site_wise_electric_energies.append(electric_contribution)
     return (site_wise_formation_energies, site_wise_electric_energies)
 
+
 def get_adsorbate_formation_energy(species_value, reactants, products, reaction_energy, reference_gases, dft_corrections_gases, adsorbate_parameters, field_effects):
     "Compute formation_energy for adsorbate in a given reaction"
-    
+
     product_energy = 0
     for product, num_units in products.items():
         if 'star' not in product:
             if 'gas' in product:
                 gas_product = product.replace('gas', '')
                 if gas_product not in reference_gases:
-                    row_index = df_out.index[df_out['species_name'] == gas_product][0]
-                    product_energy += float(df_out['formation_energy'].iloc[row_index]) * num_units
-                    
+                    row_index = df_out.index[df_out['species_name']
+                                             == gas_product][0]
+                    product_energy += float(
+                        df_out['formation_energy'].iloc[row_index]) * num_units
+
                 if gas_product in dft_corrections_gases:
                     product_energy += dft_corrections_gases[gas_product] * num_units
 
@@ -319,23 +351,28 @@ def get_adsorbate_formation_energy(species_value, reactants, products, reaction_
             if 'gas' in reactant:
                 gas_product = reactant.replace('gas', '')
                 if gas_product not in reference_gases:
-                    row_index =  df_out.index[df_out['species_name'] == gas_product][0]
-                    reactant_energy += float(df_out['formation_energy'].iloc[row_index]) * num_units
-        
+                    row_index = df_out.index[df_out['species_name']
+                                             == gas_product][0]
+                    reactant_energy += float(
+                        df_out['formation_energy'].iloc[row_index]) * num_units
+
                 if gas_product in dft_corrections_gases:
                     reactant_energy += dft_corrections_gases[gas_product] * num_units
 
     # Apply solvation energy corrections
     if species_value in adsorbate_parameters['solvation_corrections_adsorbates']:
-        formation_energy = reaction_energy + product_energy - reactant_energy + adsorbate_parameters['solvation_corrections_adsorbates'][species_value]
+        formation_energy = reaction_energy + product_energy - reactant_energy + \
+            adsorbate_parameters['solvation_corrections_adsorbates'][species_value]
     else:
         formation_energy = reaction_energy + product_energy - reactant_energy
 
     # Apply field effects
-    electric_contribution = get_electric_field_contribution(field_effects, species_value, reactants)
+    electric_contribution = get_electric_field_contribution(
+        field_effects, species_value, reactants)
     formation_energy += electric_contribution
 
     return (formation_energy, electric_contribution)
+
 
 def formula_to_chemical_symbols(formula):
     "Return dictionary mapping chemical symbols to number of atoms"
@@ -384,5 +421,6 @@ def formula_to_chemical_symbols(formula):
 
     # multiply number of atoms for each chemical symbol with number of formula units
     for key in chemical_symbols_dict.keys():
-        chemical_symbols_dict[key] = formula_unit_count * chemical_symbols_dict[key]
+        chemical_symbols_dict[key] = formula_unit_count * \
+            chemical_symbols_dict[key]
     return chemical_symbols_dict
